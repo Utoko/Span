@@ -1,19 +1,37 @@
-import { env } from "@/common/utils/envConfig";
-import { app, logger } from "@/server";
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import taskRouter from './api/task/taskRouter';
+import errorHandler, { notFoundHandler } from './common/middleware/errorHandler';
+import requestLogger from './common/middleware/requestLogger';
 
-const server = app.listen(env.PORT, () => {
-  const { NODE_ENV, HOST, PORT } = env;
-  logger.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`);
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(helmet());
+app.use(express.json());
+app.use(requestLogger);
+
+// Rate limiting (optional)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
 });
+app.use(limiter);
 
-const onCloseSignal = () => {
-  logger.info("sigint received, shutting down");
-  server.close(() => {
-    logger.info("server closed");
-    process.exit();
-  });
-  setTimeout(() => process.exit(1), 10000).unref(); // Force shutdown after 10s
-};
+// API routes
+app.use('/api/tasks', taskRouter);
 
-process.on("SIGINT", onCloseSignal);
-process.on("SIGTERM", onCloseSignal);
+// Error handling
+app.use(errorHandler());
+app.use(notFoundHandler);
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
